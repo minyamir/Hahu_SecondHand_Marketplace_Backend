@@ -14,10 +14,10 @@ async function haHuModelCheck() {
         "gemini-3.1-flash-lite-preview", 
         "gemini-3-flash-preview",       
         "gemini-2.0-flash",              
-        "gemini-1.5-flash"               
+        "gemini-1.5-flash"           
     ];
 
-    console.log("🚀 Testing models for HaHu Market Biometrics...");
+    console.log("🚀 Testing models for HaHu Market Biometrics... it is working or not");
 
     for (const modelId of targets) {
         try {
