@@ -132,8 +132,9 @@ export const getListingById = async (req, res) => {
             });
         }
 
-        // Increment view count automatically
+        // Increment view count and update ranking score manually
         listing.views += 1;
+        listing.rankingScore += 0.5; // <-- ADD THIS LINE HERE
         await listing.save();
 
         res.status(200).json({
@@ -148,7 +149,6 @@ export const getListingById = async (req, res) => {
         });
     }
 };
-
 // Update a listing
 export const updateListing = async (req, res) => {
     try {
