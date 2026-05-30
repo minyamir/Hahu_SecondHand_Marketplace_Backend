@@ -7,7 +7,7 @@ async function haHuModelCheck() {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) return console.error("❌ No GEMINI_API_KEY found in your .env file.");
 
-
+    // Initialize the SDK
     const genAI = new GoogleGenerativeAI(apiKey);
 
     const targets = [
