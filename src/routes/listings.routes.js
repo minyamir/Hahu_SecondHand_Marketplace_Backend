@@ -34,7 +34,7 @@ router.post(
 
 router.put('/:id', authMiddleware, updateListing);
 router.delete('/:id', authMiddleware, deleteListing);
-// ... existing imports
+//  existing imports
 router.patch('/:id/view', incrementViews);
 router.patch('/:id/like', authMiddleware, toggleLike);
 router.patch('/:id/sold', authMiddleware, toggleSoldStatus);
