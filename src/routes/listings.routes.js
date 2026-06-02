@@ -28,7 +28,7 @@ router.post(
     authMiddleware,      // 1. Are they logged in?
     verifiedMiddleware,  // 2. Have they passed the ID audit?
     upload.array('images', 5), // 3. Handle up to 5 product photos
-    createListing        // 4. Finally, save to DB
+    createListing        // 4. Finally save to DB
 );
 
 
