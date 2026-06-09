@@ -35,3 +35,5 @@ export const verifiedMiddleware = async (req, res, next) => {
         });
     }
 };
+// Add this line at the very bottom of your verified.middleware.js file:
+export default verifiedMiddleware;
