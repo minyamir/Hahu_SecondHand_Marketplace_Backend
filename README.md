@@ -7,7 +7,7 @@ Developed a full-stack  App with in second-hand marketplace platform with secure
 Integrated wallet for safe payments between buyers and sellers.
 Funds are protected during transactions until delivery is completed.
 Reduces payment scams and improves transaction security.
-Real-Time Chat System
+### Real-Time Chat System
 Buyers and sellers communicate through an in-app messaging system.
 Supports negotiation, product discussion, and delivery coordination.
 AI Scam & Illegal Activity Detection
