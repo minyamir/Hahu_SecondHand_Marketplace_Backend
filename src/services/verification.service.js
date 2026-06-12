@@ -1,96 +1,101 @@
 import Verification from '../models/Verification.model.js';
 import User from '../models/User.model.js';
 import { performDeepAudit } from '../ai/nationalIdDetection.js';
+import { compare } from './faceMatch.service.js'; // The client that calls FastAPI
 import fs from 'fs';
 
 export const verifyIdentity = async (userId, files) => {
     const user = await User.findById(userId);
     if (!user) throw new Error("User context not found.");
 
+    // 1. FASTAPI BIOMETRIC CHECK (The Specialist)
+    // We send only the ID and Video files for high-precision face matching
+    const bio = await compare(files.idFront[0].path, files.livenessVideo[0].path);
+    
+    if (!bio.match) {
+        cleanupAllFiles(files);
+        throw new Error(`Security Rejection: Biometric mismatch. Score: ${bio.similarity.toFixed(2)}`);
+    }
+
+    // 2. GEMINI FORENSIC AUDIT (The Brain)
+    // Pass the files to Gemini for Name/FCN extraction and Fraud checking
     const audit = await performDeepAudit(files, user.fullName);
 
-    // 1. DUPLICATE FCN LOCK
+    // 3. DUPLICATE FCN LOCK
     const fcn = audit.fcnNumber || "UNKNOWN";
     const duplicateId = await Verification.findOne({ fcnNumber: fcn });
     if (duplicateId && duplicateId.userId.toString() !== userId) {
         cleanupAllFiles(files);
-        throw new Error("Security Alert: This National ID is already registered to another HaHu Market account.");
+        throw new Error("Security Alert: This National ID is already registered.");
     }
 
-    // 2. HARD-BLOCK LOGIC (Scam/Fraud Prevention)
-    // We check audit.success or audit.decision directly from the AI bridge
-    if (audit.faceMatchScore < 40 || audit.decision === "REJECT") {
-        cleanupAllFiles(files);
-        throw new Error(`Security Rejection: ${audit.reason || "Biometric verification failed."}`);
-    }
+// --- 4. DATA MAPPING & STATUS DETERMINATION ---
+// const trustScore = bio.similarity * 100;
 
-    // 3. DATA NORMALIZATION & MAPPING
-    // Map AI JSON keys to your local logic
-    const trustScore = audit.faceMatchScore || 0;
-    const livenessOk = audit.videoLivenessConfirmed === true;
-    const earsOk = audit.earsVerified === true;
-    
-    // Normalize names (remove extra spaces/case sensitivity) to prevent false flags
-    const registeredName = user.fullName.trim().toLowerCase();
-    const idName = (audit.fullNameOnId || "").trim().toLowerCase();
-    const nameMatches = idName.includes(registeredName) || registeredName.includes(idName) || audit.nameMatches === true;
+// // ADD THIS DEBUGGING BLOCK
+// console.log("--- DEBUG AUDIT ---");
+// console.log("Name Match (Gemini):", audit.nameMatches);
+// console.log("Fraud Flag (Gemini Decision):", audit.decision);
+// console.log("Reason Provided:", audit.reason);
+// console.log("-------------------");
 
-    // 4. DETERMINE FINAL STATUS
-    let finalStatus = 'approved';
+// const isNameMatch = audit.nameMatches === true; 
+// const isFraudFlagged = audit.decision === "FLAG";
 
-    const triggersFlag = 
-        trustScore < 95 ||        // Raised threshold for auto-approval
-        !livenessOk || 
-        !earsOk || 
-        !nameMatches || 
-        audit.decision === "FLAG";
+// const finalStatus = (isNameMatch && !isFraudFlagged) ? 'approved' : 'flagged';
 
-    if (triggersFlag) {
-        finalStatus = 'flagged';
-    }
+// --- 4. DATA MAPPING & STATUS DETERMINATION ---
+const trustScore = bio.similarity * 100;
+const matchScore = audit.nameMatchScore || 0;
+// INSERT THE DEBUG LOG HERE
+console.log("DEBUG: Decision Details ->", {
+    matchScore,
+    bioValid: bio.match,
+    decision: audit.decision,
+    reason: audit.reason
+});
+// SAFE CHECK: Use optional chaining (?.) and a fallback empty string
+const reason = (audit.reason || "").toLowerCase(); 
 
+const isBiometricValid = bio.match === true;
+const isNameValid = matchScore >= 85;
+
+// Check if the AI flag is for something critical
+const isCriticalFraud = audit.decision === "FLAG" && 
+                        (reason.includes('tamper') || 
+                         reason.includes('forgery'));
+
+const finalStatus = (isBiometricValid && isNameValid && !isCriticalFraud) ? 'approved' : 'flagged';
     // 5. UPDATE OR CREATE RECORD
     const record = await Verification.findOneAndUpdate(
         { userId },
         {
-            fullNameOnId: audit.fullNameOnId || "Unknown",
             fcnNumber: fcn,
             idImageFront: files.idFront[0].path, 
             idImageBack: files.idBack[0].path,
-            faceFrontPath: files.faceFront[0].path,
-            faceLeftPath: files.faceLeft[0].path,
-            faceRightPath: files.faceRight[0].path,
-            blinkDetected: livenessOk, // Mapping AI result to DB field
-            earsVerified: earsOk,
+            livenessVideoPath: files.livenessVideo[0].path,
+            blinkDetected: bio.liveness,
             trustScore: trustScore,
             aiReason: audit.reason,
-            status: finalStatus,
-            $inc: { attempts: 1 },
-            lastAttemptAt: Date.now()
+            status: finalStatus
         },
-        { upsert: true, new: true }
+       { upsert: true, returnDocument: 'after' }
     );
 
     // 6. UNLOCK USER
     if (finalStatus === 'approved') {
-        await User.findByIdAndUpdate(userId, { 
-            isVerified: true,
-            verificationRecord: record._id 
-        });
+        await User.findByIdAndUpdate(userId, { isVerified: true, verificationRecord: record._id });
     }
 
-    // 7. CLEANUP SENSITIVE VIDEO
-    if (files.livenessVideo && files.livenessVideo[0] && fs.existsSync(files.livenessVideo[0].path)) {
-        fs.unlinkSync(files.livenessVideo[0].path);
-    }
+    // 7. CLEANUP SENSITIVE FILES
+    // (Note: Keep the video until the process is fully done)
+    cleanupAllFiles(files); 
 
     return { 
         success: finalStatus === 'approved', 
         status: finalStatus,
         score: trustScore,
-        message: finalStatus === 'flagged' 
-            ? `Reviewing: ${audit.reason}`
-            : "Verification successful! Welcome to the trusted seller community."
+        message: finalStatus === 'flagged' ? "Reviewing" : "Verification successful!"
     };
 };
 
