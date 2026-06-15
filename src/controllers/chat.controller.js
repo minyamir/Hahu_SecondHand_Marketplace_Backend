@@ -6,31 +6,27 @@ import * as chatService from '../services/chat.service.js';
  * @route   POST /api/chats/initiate
  * @access  Private (Verified Only via Middleware)
  */
+// src/controllers/chat.controller.js
+
 export const initializeChatRoom = async (req, res) => {
     try {
-        const { listingId, sellerId } = req.body;
-        const buyerId = req.user.id;
+        // Change 'sellerId' to 'targetUserId' to match your "Participant-Based" flow
+        const { listingId, targetUserId } = req.body; 
+        const currentUserId = req.user.id;
 
-        // 1. Guard check: Prevent users from making chat rooms with themselves
-        if (buyerId === sellerId) {
+        if (currentUserId === targetUserId) {
             return res.status(400).json({ 
                 success: false, 
                 message: "You cannot initiate a trade chat with yourself." 
             });
         }
 
-        // 2. Delegate data logic to the service layer
-        const chat = await chatService.createOrGetChat(listingId, buyerId, sellerId);
+        // Logic remains the same, but now it's semantic and clear
+        const chat = await chatService.createOrGetChat(listingId, currentUserId, targetUserId);
 
-        return res.status(200).json({ 
-            success: true, 
-            data: chat 
-        });
+        return res.status(200).json({ success: true, data: chat });
     } catch (error) {
-        return res.status(500).json({ 
-            success: false, 
-            message: error.message 
-        });
+        return res.status(500).json({ success: false, message: error.message });
     }
 };
 

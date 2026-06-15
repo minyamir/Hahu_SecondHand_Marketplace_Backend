@@ -27,11 +27,16 @@ const userSchema = new mongoose.Schema(
       type: String,
       enum: Object.values(ROLES),
       default: ROLES.USER
+    },// Adding this helps Admin dashboards filter users quickly
+    verificationStatus: {
+        type: String,
+        enum: ['unverified', 'pending', 'verified', 'flagged', 'rejected'],
+        default: 'unverified'
     },
     isVerified: {
-      type: Boolean,
-      default: false
-    },
+        type: Boolean,
+        default: false
+      },
     avatar: {
       type: String,
       default: ""

@@ -2,8 +2,9 @@ import bcrypt from "bcryptjs";
 import User from "../models/User.model.js";
 import { generateToken } from "../utils/generateToken.js";
 import { sendWelcomeEmail } from "./email.service.js";
+import {ROLES} from "../constants/roles.js"; // Ensure this is imported
 
-export const registerUser = async ({ fullName, email, password, phone }) => {
+export const registerUser = async ({ fullName, email, password, phone, role }) => {
   if (!fullName || !email || !password) {
     const error = new Error("Full name, email, and password are required");
     error.statusCode = 400;
@@ -25,7 +26,8 @@ export const registerUser = async ({ fullName, email, password, phone }) => {
     fullName: fullName.trim(),
     email: email.toLowerCase().trim(),
     password: hashedPassword,
-    phone: phone || ""
+    phone: phone || "",
+    role: role || ROLES.USER
   });
 
   // Background task: Don't 'await' here if you want fast responses

@@ -1,23 +1,27 @@
 import { Server } from "socket.io";
-import { env } from "../config/env.js";
 import { registerChatSocket } from "./chatSocket.js";
 
 export let io;
 
+// src/sockets/socketServer.js
 export const setupSocketServer = (server) => {
   io = new Server(server, {
     cors: {
-      origin: env.clientUrl,
+      origin: "*", 
+      methods: ["GET", "POST"],
       credentials: true
     }
   });
 
-  io.on("connection", (socket) => {
-    console.log("Socket connected:", socket.id);
-    registerChatSocket(socket, io);
-
-    socket.on("disconnect", () => {
-      console.log("Socket disconnected:", socket.id);
-    });
+  // Enable debugging to see handshake details in the terminal
+  io.engine.on("initial_headers", (headers, req) => {
+    console.log("DEBUG: Handshake request received from:", req.headers.origin);
   });
+  
+  io.engine.on("connection_error", (err) => {
+    console.log("DEBUG: Handshake connection error:", err.message);
+  });
+
+  registerChatSocket(io);
+  return io;
 };

@@ -1,76 +1,76 @@
-// src/sockets/chatSocket.js
 import jwt from 'jsonwebtoken';
-import User from '../models/User.model.js'; // Ensure .js extension is present for ESM
-import { saveAndProcessMessage } from '../controllers/chat.controller.js';
+import mongoose from 'mongoose';
+import User from '../models/User.model.js';
+import Chat from '../models/Chat.model.js'; // Ensure you import your Chat model
+import { createOrGetChat } from '../services/chat.service.js';
+import { saveAndProcessMessage } from '../controllers/chat.controller.js'; 
 
 export const registerChatSocket = (io) => {
-    // 1. Socket authentication handshake middleware
     io.use(async (socket, next) => {
-        // Safe verification fallback using optional chaining (?.)
-        const token = socket.handshake.auth?.token || socket.handshake.query?.token;
-        if (!token) {
-            return next(new Error("Authentication failure: Token missing."));
-        }
+        const token = socket.handshake.query?.token || socket.handshake.auth?.token;
+        if (!token) return next(new Error("Token missing"));
 
         try {
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
-            
-            // Query the database to ensure the user's live verification status is active
             const user = await User.findById(decoded.id);
-            if (!user) {
-                return next(new Error("Authentication failure: User account not found."));
-            }
-
-            // CRITICAL CHECK: Block socket connection if they are not verified
-            if (!user.isVerified) {
-                return next(new Error("Access Denied: Unverified accounts cannot connect to the chat network."));
-            }
-
-            // Inject the verified user payload directly into the socket object
+            if (!user) return next(new Error("User not found"));
+            
             socket.user = user;
             next();
         } catch (err) {
-            return next(new Error("Authentication failure: Invalid signature token."));
+            next(new Error("Invalid token"));
         }
     });
 
-    // 2. Continuous Real-time Connection Pipelines
-    io.on('connection', (socket) => {
-        console.log(`Verified user connected to socket: ${socket.user.fullName} (${socket.user.id})`);
+    io.on('connection', async (socket) => {
+        console.log(`✅ ${socket.user.fullName} connected.`);
 
-        // Event listener to put a buyer and seller in an isolated conversation channel
-        socket.on('joinChatRoom', ({ chatId }) => {
-            socket.join(chatId);
-            console.log(`🚪 User ${socket.user.fullName} entered room channel: ${chatId}`);
-        });
+        // --- NEW: AUTO-JOIN LOGIC ---
+        try {
+            const userChats = await Chat.find({ participants: socket.user._id });
+            userChats.forEach(chat => {
+                socket.join(chat._id.toString());
+                console.log(`📥 ${socket.user.fullName} auto-joined room: ${chat._id}`);
+            });
+        } catch (err) {
+            console.error("❌ Auto-join failed:", err);
+        }
 
-        // Event listener to parse, filter, and stream text strings
-        socket.on('sendMessage', async ({ chatId, text }) => {
+        socket.on('sendMessage', async (data) => {
+            const msgData = typeof data === 'string' ? JSON.parse(data) : data;
+            
             try {
-                // Double-enforcement guard clause inside the stream pipe
-                if (!socket.user.isVerified) {
-                    return socket.emit('error', { message: "Action blocked: Account is unverified." });
-                }
-
-                // Pass message payload to controller -> database persistence
-                const processedMsg = await saveAndProcessMessage(chatId, socket.user.id, text);
+                const { targetUserId, listingId, text } = msgData;
                 
-                // Stream down cleanly to everyone inside the room
-                io.to(chatId).emit('messageReceived', processedMsg);
-
-                // Broadcast security notification if AI flags off-platform trade manipulation keywords
-                if (processedMsg.isFlagged) {
-                    io.to(chatId).emit('systemSafetyWarning', {
-                        message: "⚠️ Warning: For your security, keep all transactions and communication inside HaHu Market. Do not bypass the escrow system."
-                    });
+                if (!targetUserId || !listingId || !text) {
+                    throw new Error("Missing required fields");
                 }
+
+                const senderId = socket.user._id;
+                const targetObjId = new mongoose.Types.ObjectId(targetUserId);
+                const listingObjId = new mongoose.Types.ObjectId(listingId);
+
+                // 1. Resolve or Create the room
+                const chat = await createOrGetChat(listingObjId, senderId, targetObjId);
+                const chatId = chat._id.toString();
+                
+                // 2. Process, Moderate, and Save
+                const savedMessage = await saveAndProcessMessage(chatId, senderId, text);
+                
+                // 3. Join sender to room (in case they weren't) and Broadcast
+                socket.join(chatId); 
+                // socket.to(chatId) sends to everyone in room EXCEPT sender
+                socket.to(chatId).emit('messageReceived', savedMessage);
+                
+                console.log(`💾 SUCCESS: Message sent to room ${chatId}`);
             } catch (error) {
-                socket.emit('error', { message: "Message could not be processed." });
+                console.error("❌ DEBUG: Detailed Error:", error); 
+                socket.emit('error', { message: error.message });
             }
         });
 
         socket.on('disconnect', () => {
-            console.log(`🔌 User disconnected from socket layer: ${socket.user.fullName}`);
+            console.log(`❌ ${socket.user.fullName} disconnected.`);
         });
     });
 };
