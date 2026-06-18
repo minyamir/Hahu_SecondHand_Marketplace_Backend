@@ -1,0 +1,82 @@
+# Python
+
+**pycache**/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+
+venv/
+.env/
+.venv/
+
+# Environment Variables
+
+.env
+.env.local
+
+# IDE
+
+.vscode/
+.idea/
+
+# OS Files
+
+.DS_Store
+Thumbs.db
+
+# Logs
+
+*.log
+
+# Uploads
+
+uploads/
+uploads/id_images/
+uploads/videos/
+
+# Temporary Files
+
+temp/
+tmp/
+
+# Python Build Files
+
+build/
+dist/
+*.egg-info/
+
+# Pytest
+
+.pytest_cache/
+
+# Coverage
+
+.coverage
+htmlcov/
+
+# InsightFace Models
+
+models/
+.insightface/
+
+# ONNX Models
+
+*.onnx
+
+# Jupyter
+
+.ipynb_checkpoints/
+
+# FastAPI Cache
+
+.cache/
+
+# Runtime Files
+
+*.pid
+
+# Local Database
+
+*.db
+*.sqlite3
