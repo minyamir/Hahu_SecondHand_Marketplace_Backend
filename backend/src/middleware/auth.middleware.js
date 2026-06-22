@@ -38,3 +38,4 @@ export const authMiddleware = async (req, res, next) => { // 2. Make it async
 };
 // Add this line at the very bottom of your auth.middleware.js file:
 export default authMiddleware;
+export { authMiddleware as protect };

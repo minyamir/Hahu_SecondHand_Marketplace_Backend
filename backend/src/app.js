@@ -4,7 +4,7 @@ import { corsMiddleware } from "./config/cors.js";
 import routes from "./routes/index.js";
 import { notFoundMiddleware } from "./middleware/notFound.middleware.js";
 import { errorMiddleware } from "./middleware/error.middleware.js";
-
+import transactionRoutes from './routes/transaction.routes.js';
 const app = express();
 
 app.use(corsMiddleware);
@@ -12,6 +12,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan("dev"));
 app.use("/uploads", express.static("uploads"));
+app.use('/api/transactions', transactionRoutes);
 
 app.get("/", (req, res) => {
   res.json({

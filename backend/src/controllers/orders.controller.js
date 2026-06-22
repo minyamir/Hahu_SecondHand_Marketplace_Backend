@@ -1,65 +1,66 @@
-const Order = require('../models/Order.model');
-const Listing = require('../models/Listing.model');
-const User = require('../models/User.model');
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
+import * as OrderService from '../services/orders.service.js';
 
+// Initiate Escrow Purchase
 export const initiateEscrowPurchase = async (req, res) => {
-    const session = await mongoose.startSession();
-    session.startTransaction();
+    // Check if the environment supports transactions
+    const isReplicaSet = mongoose.connection.readyState === 1 && mongoose.connection.db.serverConfig?.ismaster?.setName;
+
+    let session = null;
+    if (isReplicaSet) {
+        session = await mongoose.startSession();
+        session.startTransaction();
+    }
 
     try {
         const { listingId } = req.body;
-        const buyerId = req.user.id;
+        const buyerId = req.user._id;
 
-        const listing = await Listing.findById(listingId).session(session);
-        if (!listing || listing.isSold) {
-            return res.status(404).json({ success: false, message: "Listing is unavailable or already sold." });
-        }
-
-        const buyer = await User.findById(buyerId).session(session);
-        if (buyer.walletBalance < listing.price) {
-            return res.status(400).json({ success: false, message: "Insufficient wallet funds. Please recharge your account balance." });
-        }
-
-        const commissionPercentage = 0.05; // 5% flat marketplace processing tier commission
-        const platformFee = listing.price * commissionPercentage;
-        const netSellerPayout = listing.price - platformFee;
-
-        // 1. Deduct total price from the buyer's liquid balance
-        buyer.walletBalance -= listing.price;
-        await buyer.save({ session });
-
-        // 2. Lock net payout securely inside the seller's escrow suspension balance pool
-        const seller = await User.findById(listing.seller).session(session);
-        seller.escrowBalance += netSellerPayout;
-        await seller.save({ session });
-
-        // 3. Flag listing status to prevent parallel checkout loops
-        listing.isSold = true;
-        await listing.save({ session });
-
-        // 4. Generate the unalterable Ledger Order record
-        const order = await Order.create([{
-            buyer: buyerId,
-            seller: listing.seller,
-            listing: listingId,
-            amountPaid: listing.price,
-            platformFee: platformFee,
-            status: 'escrow_locked'
-        }], { session });
-
-        await session.commitTransaction();
-        session.endSession();
-
-        res.status(201).json({
-            success: true,
-            message: "Funds successfully locked securely in escrow holding pool.",
-            data: order[0]
+        // Pass the session (or null) to the service
+        const order = await OrderService.processEscrowPurchaseService(buyerId, listingId, session);
+        
+        if (session) await session.commitTransaction();
+        
+        res.status(201).json({ 
+            success: true, 
+            message: "Funds successfully locked in escrow.",
+            data: order 
         });
-
     } catch (error) {
-        await session.abortTransaction();
-        session.endSession();
-        res.status(500).json({ success: false, message: error.message });
+        if (session) await session.abortTransaction();
+        res.status(400).json({ success: false, message: error.message });
+    } finally {
+        if (session) session.endSession();
+    }
+};
+
+// Get Order by ID
+export const getOrder = async (req, res) => {
+    try {
+        const order = await OrderService.getOrderByIdService(req.params.id);
+        if (!order) return res.status(404).json({ success: false, message: "Order not found" });
+        
+        res.status(200).json({ success: true, data: order });
+    } catch (error) {
+        res.status(400).json({ success: false, message: error.message });
+    }
+};
+
+// Update Order Status
+export const updateOrderStatus = async (req, res) => {
+    try {
+        const { status } = req.body;
+        let updatedOrder;
+
+        if (status === 'completed') {
+            updatedOrder = await OrderService.completeOrderService(req.params.id);
+        } else {
+            // Handle other status updates
+            updatedOrder = await OrderService.updateOrderStatusService(req.params.id, status);
+        }
+        
+        res.status(200).json({ success: true, data: updatedOrder });
+    } catch (error) {
+        res.status(400).json({ success: false, message: error.message });
     }
 };
