@@ -6,7 +6,7 @@ export const createOrGetChat = async (listingId, buyerId, sellerId) => {
     // Check if a unique chat room already exists for this exact item between these users
     let chat = await Chat.findOne({
         listing: listingId,
-        participants: { $all: [buyerId, sellerId] }
+        participants: {     $all: [buyerId, sellerId] }
     });
 
     // If no prior conversation room exists, instantiate a fresh tracking schema

@@ -6,21 +6,58 @@ import { createOrGetChat } from '../services/chat.service.js';
 import { saveAndProcessMessage } from '../controllers/chat.controller.js'; 
 
 export const registerChatSocket = (io) => {
-    io.use(async (socket, next) => {
-        const token = socket.handshake.query?.token || socket.handshake.auth?.token;
-        if (!token) return next(new Error("Token missing"));
+  io.use(async (socket, next) => {
+    console.log("\n========== CHAT SOCKET ==========");
+    console.log("Headers:", socket.handshake.headers);
+    console.log("Query:", socket.handshake.query);
+    console.log("Auth:", socket.handshake.auth);
 
-        try {
-            const decoded = jwt.verify(token, process.env.JWT_SECRET);
-            const user = await User.findById(decoded.id);
-            if (!user) return next(new Error("User not found"));
-            
-            socket.user = user;
-            next();
-        } catch (err) {
-            next(new Error("Invalid token"));
+    let token = null;
+
+    // 1. Authorization Header
+    const authHeader = socket.handshake.headers.authorization;
+
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+        token = authHeader.substring(7);
+    }
+
+    // 2. Query (?token=...)
+    if (!token && socket.handshake.query?.token) {
+        token = socket.handshake.query.token;
+    }
+
+    // 3. Auth
+    if (!token && socket.handshake.auth?.token) {
+        token = socket.handshake.auth.token;
+    }
+
+    if (!token) {
+        console.log("❌ TOKEN NOT FOUND");
+        return next(new Error("Token missing"));
+    }
+
+    console.log("✅ TOKEN FOUND");
+
+    try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+        const user = await User.findById(decoded.id);
+
+        if (!user) {
+            return next(new Error("User not found"));
         }
-    });
+
+        socket.user = user;
+
+        console.log(`✅ ${user.fullName} authenticated`);
+
+        next();
+
+    } catch (err) {
+        console.log("JWT ERROR:", err.message);
+        next(new Error("Invalid token"));
+    }
+});
 
     io.on('connection', async (socket) => {
         console.log(`✅ ${socket.user.fullName} connected.`);
