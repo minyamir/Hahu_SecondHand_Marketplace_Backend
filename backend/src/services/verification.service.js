@@ -3,6 +3,7 @@ import User from '../models/User.model.js';
 import { performDeepAudit } from '../ai/nationalIdDetection.js';
 import { compare } from './faceMatch.service.js'; // The client that calls FastAPI
 import fs from 'fs';
+import { createNotification } from "./notification.service.js";
 
 export const verifyIdentity = async (userId, files) => {
     const user = await User.findById(userId);
@@ -12,10 +13,18 @@ export const verifyIdentity = async (userId, files) => {
     // We send only the ID and Video files for high-precision face matching
     const bio = await compare(files.idFront[0].path, files.livenessVideo[0].path);
     
-    if (!bio.match) {
-        cleanupAllFiles(files);
-        throw new Error(`Security Rejection: Biometric mismatch. Score: ${bio.similarity.toFixed(2)}`);
-    }
+ if (!bio.match) {
+    // እዚህ ጋር ነው ማሳወቂያውን መላክ ያለብዎት!
+    await createNotification({
+        userId,
+        title: "❌ Verification Failed",
+       message: "Your verification could not be approved. Biometric mismatch detected.",
+        type: "verification_rejected"
+    });
+
+    cleanupAllFiles(files);
+    throw new Error(`Security Rejection: Biometric mismatch. Score: ${bio.similarity.toFixed(2)}`);
+}
 
     // 2. GEMINI FORENSIC AUDIT (The Brain)
     // Pass the files to Gemini for Name/FCN extraction and Fraud checking
@@ -81,12 +90,37 @@ const finalStatus = (isBiometricValid && isNameValid && !isCriticalFraud) ? 'app
         },
        { upsert: true, returnDocument: 'after' }
     );
-
+        //     await createNotification({
+        //     userId,
+        //     title: "🪪 Verification Submitted",
+        //     message: "Your identity verification has been submitted and is under review.",
+        //     type: "verification_submitted"
+        // }); this is በእርስዎ React/Next.js/Mobile ኮድ ውስጥ፣ ፋይሉን ከመላክዎ በፊት setLoading(true) እና "Verification Submitted" የሚል ማሳወቂያ ያሳዩ።
     // 6. UNLOCK USER
-    if (finalStatus === 'approved') {
-        await User.findByIdAndUpdate(userId, { isVerified: true, verificationRecord: record._id });
-    }
+        if (finalStatus === "approved") {
 
+            await User.findByIdAndUpdate(userId, {
+                isVerified: true,
+                verificationRecord: record._id
+            });
+
+            await createNotification({
+                userId,
+                title: "✅ Verification Approved",
+                message: "Congratulations! Your identity has been verified successfully.",
+                type: "verification_approved"
+            });
+
+        }
+             // Current logic:
+                    if (finalStatus === "false" || finalStatus === "flagged") {
+                        await createNotification({
+                            userId,
+                            title: "❌ Verification Failed", // Or "Verification Flagged"
+                            message: audit.reason || "Your verification could not be approved.",
+                            type: "verification_rejected" // Use this to trigger the frontend reject-UI
+                        });
+                    }
     // 7. CLEANUP SENSITIVE FILES
     // (Note: Keep the video until the process is fully done)
     cleanupAllFiles(files); 
