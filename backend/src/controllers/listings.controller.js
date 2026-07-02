@@ -1,6 +1,6 @@
 import Listing from '../models/Listing.model.js';
 import { CATEGORIES } from '../constants/categories.js';
-
+import { createNotification } from "../services/notification.service.js";
 export const createListing = async (req, res) => {
     try {
         const { title, description, price, category, condition, location } = req.body;
@@ -42,13 +42,19 @@ export const createListing = async (req, res) => {
         });
 
         await newListing.save();
-
+               // 1. Notify the seller (Confirmation)
+        await createNotification({
+            userId: sellerId,
+            title: "🚀 Listing Live!",
+            message: `Your item "${title}" has been posted successfully.`,
+            type: "listing_created"
+        });
         res.status(201).json({
             success: true,
             message: "Listing posted successfully!",
             data: newListing
         });
-
+       
     } catch (error) {
         console.error("Create Listing Error:", error.message);
         res.status(500).json({

@@ -2,7 +2,7 @@ import Order from '../models/Order.model.js';
 import Listing from '../models/Listing.model.js';
 import User from '../models/User.model.js';
 import { Transaction } from "../models/Transaction.model.js"; // Import your new model
-
+import { createNotification } from "./notification.service.js"; // Import the notification service
 // ዋናው የ Escrow ግብይት ስራ
 export const processEscrowPurchaseService = async (buyerId, listingId, session) => {
     // 1. ሊስቲንግ መፈተሽ
@@ -28,74 +28,101 @@ export const processEscrowPurchaseService = async (buyerId, listingId, session) 
     listing.isSold = true;
     await listing.save({ session });
 
-    // 5. Order መፍጠር
-    const [order] = await Order.create([{
-        buyer: buyerId,
-        seller: listing.seller,
-        listing: listingId,
-        amountPaid: listing.price,
-        platformFee,
-        status: 'escrow_locked'
-    }], { session });
+            // 5. Order መፍጠር (እዚህ ጋር ነው ማሳወቂያውም የሚካተተው)
+            const orders = await Order.create([{
+                buyer: buyerId,
+                seller: listing.seller,
+                listing: listingId,
+                amountPaid: listing.price,
+                platformFee,
+                status: 'escrow_locked'
+            }], { session });
 
-    return order;
-};
+            const order = orders[0];
 
-// ቀደም ብለህ የጻፍካቸው Utility functions
-export const getOrderByIdService = async (orderId) => {
-    return await Order.findById(orderId).populate('buyer seller listing');
-};
+            // ማሳወቂያዎች - በ Function ውስጥ ስለሆኑ አሁን በትክክል ይሰራሉ
+            await createNotification({
+                userId: order.buyer,
+                title: "📦 Order Placed",
+                message: `Your order for ${listing.title} has been placed successfully.`,
+                type: "order_created"
+            });
 
-export const updateOrderStatusService = async (orderId, newStatus) => {
-    return await Order.findByIdAndUpdate(orderId, { status: newStatus }, { new: true });
-};
+            await createNotification({
+                userId: listing.seller,
+                title: "💰 New Sale",
+                message: "An item has been purchased! Funds are held in escrow.",
+                type: "escrow_locked"
+            });
+
+            return order;
+        };
+
+        // ቀደም ብለህ የጻፍካቸው Utility functions
+        export const getOrderByIdService = async (orderId) => {
+            return await Order.findById(orderId).populate('buyer seller listing');
+        };
+
+        export const updateOrderStatusService = async (orderId, newStatus) => {
+            return await Order.findByIdAndUpdate(orderId, { status: newStatus }, { new: true });
+        };
 
 
-export const completeOrderService = async (orderId) => {
-    // 1. Find the order
-    const order = await Order.findById(orderId);
-    if (!order || order.status !== 'escrow_locked') {
-        throw new Error("Order not found or already processed.");
-    }
+        export const completeOrderService = async (orderId) => {
+             console.log("✅ completeOrderService called");
+            // 1. Find the order
+            const order = await Order.findById(orderId);
 
-    const netPayout = order.amountPaid - order.platformFee;
-
-    // 2. Atomically update the Seller's balance
-    const updatedSeller = await User.findByIdAndUpdate(
-        order.seller,
-        {
-            $inc: { 
-                walletBalance: netPayout, 
-                escrowBalance: -order.amountPaid // Assuming you moved the full amount to escrow initially
+            
+            if (!order || order.status !== 'escrow_locked') {
+                throw new Error("Order not found or already processed.");
             }
-        },
-        { new: true }
-    );
 
-    if (!updatedSeller) throw new Error("Seller not found.");
+            const netPayout = order.amountPaid - order.platformFee;
 
-    // 3. LOG: Create Transaction for the Seller (The 475)
-    await Transaction.create({
-        userId: order.seller,
-        orderId: order._id,
-        amount: netPayout,
-        type: 'sale_payout',
-        description: `Payout for order ${order._id}`
-    });
+            // 2. Atomically update the Seller's balance
+            const updatedSeller = await User.findByIdAndUpdate(
+                order.seller,
+                {
+                    $inc: { 
+                        walletBalance: netPayout, 
+                        escrowBalance: -order.amountPaid // Assuming you moved the full amount to escrow initially
+                    }
+                },
+                { new: true }
+            );
 
-    // 4. LOG: Create Transaction for the Platform Fee (The 25)
-    // You can point this to an ADMIN_ID or a 'system' user
-    await Transaction.create({
-        userId: "6a2db8dbcacb80d5cd8ef0cc", // Replace with your actual Admin/System ID
-        orderId: order._id,
-        amount: order.platformFee,
-        type: 'platform_fee',
-        description: `Platform commission for order ${order._id}`
-    });
+            if (!updatedSeller) throw new Error("Seller not found.");
 
-    // 5. Finalize Order status
-    order.status = 'completed';
-    await order.save();
+            // 3. LOG: Create Transaction for the Seller (The 475)
+            await Transaction.create({
+                userId: order.seller,
+                orderId: order._id,
+                amount: netPayout,
+                type: 'sale_payout',
+                description: `Payout for order ${order._id}`
+            });
 
-    return order;
-};
+            // 4. LOG: Create Transaction for the Platform Fee (The 25)
+            // You can point this to an ADMIN_ID or a 'system' user
+            await Transaction.create({
+                userId: "6a2db8dbcacb80d5cd8ef0cc", // Replace with your actual Admin/System ID
+                orderId: order._id,
+                amount: order.platformFee,
+                type: 'platform_fee',
+                description: `Platform commission for order ${order._id}`
+            });
+
+            // 5. Finalize Order status
+            order.status = 'completed';
+            await order.save();
+            // ማሳወቂያውን እዚህ ያክሉት
+                await createNotification({
+                    userId: order.seller,
+                    title: "✅ Payment Received",
+                    message: `Payment for order ${order._id} has been released.`,
+                    type: "order_completed"
+                });
+console.log("Notification entry created for seller:", order.seller);
+            return order;
+        };

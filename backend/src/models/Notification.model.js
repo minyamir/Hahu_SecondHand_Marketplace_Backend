@@ -37,7 +37,10 @@ const notificationSchema = new mongoose.Schema(
         "order_accepted",
         "order_rejected",
         "order_completed",
-
+        "order_failed",
+       "escrow_locked",
+        "escrow_released",
+        "escrow_refunded",
         "system"
       ],
       required: true

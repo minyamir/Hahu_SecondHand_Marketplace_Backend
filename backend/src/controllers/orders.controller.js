@@ -1,34 +1,55 @@
 import mongoose from 'mongoose';
 import * as OrderService from '../services/orders.service.js';
+import { createNotification } from '../services/notification.service.js';
 
-// Initiate Escrow Purchase
-export const initiateEscrowPurchase = async (req, res) => {
-    // Check if the environment supports transactions
+// ዋናው የ Escrow ግብይት ኮንትሮለር
+export const initiateEscrowPurchase = async (req, res, next) => { // 'next'ን መጨመርዎን አይርሱ
     const isReplicaSet = mongoose.connection.readyState === 1 && mongoose.connection.db.serverConfig?.ismaster?.setName;
 
     let session = null;
     if (isReplicaSet) {
         session = await mongoose.startSession();
         session.startTransaction();
-    }
+    } 
 
     try {
         const { listingId } = req.body;
         const buyerId = req.user._id;
 
-        // Pass the session (or null) to the service
         const order = await OrderService.processEscrowPurchaseService(buyerId, listingId, session);
         
         if (session) await session.commitTransaction();
         
-        res.status(201).json({ 
+        return res.status(201).json({ 
             success: true, 
             message: "Funds successfully locked in escrow.",
             data: order 
         });
     } catch (error) {
         if (session) await session.abortTransaction();
-        res.status(400).json({ success: false, message: error.message });
+
+        // 1. ማሳወቂያ መላክ (የሚጠበቀው ስራ)
+
+        // ተጠቃሚው በቂ ገንዘብ ከሌለው
+    if (error.message === "Insufficient funds.") {
+        await createNotification({
+            userId: req.user._id, // የገዢው ID
+            title: "❌ Transaction Failed",
+            message: "Your wallet does not have enough amount of money to complete this purchase.",
+            type: "order_failed"
+        });
+    }
+       else { await createNotification({
+            userId: req.user.id || req.user._id,
+            title: "❌ Transaction Failed",
+            message: error.message || "Your purchase could not be completed.",
+            type: "order_failed"
+        });
+       }
+        // 2. ስህተቱን ለ Middleware ማስተላለፍ
+        // res.status መጠቀም ከፈለጉ፣ return ማድረግዎን ያረጋግጡ
+        return res.status(400).json({ success: false, message: error.message });
+          
     } finally {
         if (session) session.endSession();
     }
@@ -46,21 +67,22 @@ export const getOrder = async (req, res) => {
     }
 };
 
-// Update Order Status
+// order.controller.js
 export const updateOrderStatus = async (req, res) => {
     try {
         const { status } = req.body;
+        const { id: orderId } = req.params;
         let updatedOrder;
 
         if (status === 'completed') {
-            updatedOrder = await OrderService.completeOrderService(req.params.id);
+            // Service-ው ማሳወቂያውን ስለሚልክ እዚህ ጋር እንደገና መላክ አያስፈልግም
+            updatedOrder = await OrderService.completeOrderService(orderId);
         } else {
-            // Handle other status updates
-            updatedOrder = await OrderService.updateOrderStatusService(req.params.id, status);
+            updatedOrder = await OrderService.updateOrderStatusService(orderId, status);
         }
         
-        res.status(200).json({ success: true, data: updatedOrder });
+        return res.status(200).json({ success: true, data: updatedOrder });
     } catch (error) {
-        res.status(400).json({ success: false, message: error.message });
+        return res.status(400).json({ success: false, message: error.message });
     }
 };

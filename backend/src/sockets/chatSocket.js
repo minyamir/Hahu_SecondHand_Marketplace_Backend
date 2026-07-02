@@ -4,7 +4,7 @@ import User from '../models/User.model.js';
 import Chat from '../models/Chat.model.js'; // Ensure you import your Chat model
 import { createOrGetChat } from '../services/chat.service.js';
 import { saveAndProcessMessage } from '../controllers/chat.controller.js'; 
-
+import { createNotification } from "../services/notification.service.js";
 export const registerChatSocket = (io) => {
   io.use(async (socket, next) => {
     console.log("\n========== CHAT SOCKET ==========");
@@ -98,7 +98,13 @@ export const registerChatSocket = (io) => {
                 socket.join(chatId); 
                 // socket.to(chatId) sends to everyone in room EXCEPT sender
                 socket.to(chatId).emit('messageReceived', savedMessage);
-                
+                // ተጨማሪ: ለተቀባዩ (Target User) "አዲስ መልእክት አለህ" የሚል Notification መላክ
+                        await createNotification({
+                            userId: targetUserId,
+                            title: "💬 New Message",
+                            message: `You have a new message from ${socket.user.fullName}`,
+                            type: "new_chat_message"
+                        });
                 console.log(`💾 SUCCESS: Message sent to room ${chatId}`);
             } catch (error) {
                 console.error("❌ DEBUG: Detailed Error:", error); 
