@@ -41,7 +41,8 @@ const notificationSchema = new mongoose.Schema(
        "escrow_locked",
         "escrow_released",
         "escrow_refunded",
-
+         "wallet_deposit",    // <--- Add this
+        "wallet_withdrawal",
 
         "like_received",
         "system"

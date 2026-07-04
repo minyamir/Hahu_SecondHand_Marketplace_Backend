@@ -8,6 +8,7 @@ import ordersRoutes from "./orders.routes.js";
 import reportsRoutes from "./reports.routes.js";
 import adminRoutes from "./admin.routes.js";
 import notificationRoutes from "./notification.routes.js";
+import walletRoutes from "./wallet.routes.js";
 const router = Router();
 
 router.use("/auth", authRoutes);
@@ -19,4 +20,5 @@ router.use("/orders", ordersRoutes);
 router.use("/reports", reportsRoutes);
 router.use("/admin", adminRoutes);
 router.use("/notifications", notificationRoutes);
+router.use("/wallet", walletRoutes);
 export default router;
