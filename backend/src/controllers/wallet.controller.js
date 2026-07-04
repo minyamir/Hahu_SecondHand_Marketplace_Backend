@@ -40,3 +40,38 @@ export const deposit = async (req, res) => {
         res.status(500).json({ success: false, message: error.message });
     }
 };
+
+export const withdraw = async (req, res) => {
+    try {
+        const { amount, description } = req.body;
+        const userId = req.user.id; // Assuming you have auth middleware
+
+        // 1. Basic validation
+        if (!amount || amount <= 0) {
+            return res.status(400).json({ success: false, message: "Invalid withdrawal amount." });
+        }
+
+        // 2. Call the service
+        // The service will handle the balance check and the transaction logic
+        const transaction = await walletService.withdraw({
+            userId,
+            amount,
+            description: description || "Withdrawal",
+            type: "withdrawal"
+        });
+
+        // 3. Success response
+        return res.status(200).json({
+            success: true,
+            message: "Withdrawal successful",
+            data: transaction
+        });
+
+    } catch (error) {
+        // 4. Handle errors (e.g., Insufficient Funds)
+        return res.status(400).json({
+            success: false,
+            message: error.message || "Withdrawal failed"
+        });
+    }
+};

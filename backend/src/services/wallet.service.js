@@ -40,3 +40,40 @@ export const addTransaction = async (data) => {
     return transaction;
 };
 
+export const withdraw = async (data) => {
+    // 1. Check current balance
+    const user = await User.findById(data.userId);
+    if (user.walletBalance < data.amount) {
+        throw new Error("Insufficient funds for withdrawal.");
+    }
+
+    // 2. Create the withdrawal transaction
+    const transaction = await Transaction.create({
+        ...data,
+        type: "wallet_withdrawal",
+        amount: -Math.abs(data.amount) // Ensure it is negative
+    });
+
+    // 3. Update balance
+    const updatedUser = await User.findByIdAndUpdate(
+        data.userId,
+        { $inc: { walletBalance: -Math.abs(data.amount) } },
+        { returnDocument: 'after' }
+    );
+
+    // 4. Trigger Notification (via your centralized service)
+    await createNotification({
+        userId: data.userId,
+        title: "Withdrawal Successful",
+        message: `You have successfully withdrawn ${data.amount} ETB.`,
+        type: "wallet_withdrawal"
+    });
+
+    // 5. Broadcast update
+    io.to(`wallet_${data.userId}`).emit("walletUpdated", {
+        balance: updatedUser.walletBalance,
+        newTransaction: transaction
+    });
+
+    return transaction;
+};
