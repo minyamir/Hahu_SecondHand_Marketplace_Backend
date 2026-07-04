@@ -1,6 +1,8 @@
 import Listing from '../models/Listing.model.js';
 import { CATEGORIES } from '../constants/categories.js';
 import { createNotification } from "../services/notification.service.js";
+import { io } from '../sockets/socketServer.js'; // Import your initialized io instance
+
 export const createListing = async (req, res) => {
     try {
         const { title, description, price, category, condition, location } = req.body;
@@ -232,8 +234,8 @@ export const toggleSoldStatus = async (req, res) => {
     }
 };
 
-export const toggleLike=async(req,res)=>{
-    try{
+export const toggleLike = async (req, res) => {
+    try {
         const { id } = req.params;
         const userId = req.user.id;
         const listing = await Listing.findById(id);
@@ -242,26 +244,41 @@ export const toggleLike=async(req,res)=>{
         const isLiked = listing.likes.includes(userId);
 
         if (isLiked) {
-            // UNLIKE: Remove user ID and decrease ranking
             listing.likes = listing.likes.filter(uid => uid.toString() !== userId);
             listing.likesCount = Math.max(0, listing.likesCount - 1);
             listing.rankingScore -= 10; 
+
+                 // --- NEW: TRIGGER NOTIFICATION FOR SELLER ---
+            if (listing.seller._id.toString() !== userId) {
+                await createNotification({
+                    userId: listing.seller._id,
+                    title: "❤️ New Like!",
+                    message: `Someone liked your listing: ${listing.title}`,
+                    type: "like_received",
+                    listingId: listing._id
+                }); }
         } else {
-            // LIKE: Add user ID and boost ranking
             listing.likes.push(userId);
             listing.likesCount += 1;
             listing.rankingScore += 10;
         }
-
+            
         await listing.save();
+             // ADD THIS LOG
+console.log(`📡 Broadcasting 'listingUpdated' to room: listing_${id}`);
+        // Broadcast the update to everyone in the listing room
+        io.to(`listing_${id}`).emit("listingUpdated", {
+            listingId: id,
+            likesCount: listing.likesCount,
+            isLiked: !isLiked
+        });
 
         res.status(200).json({ 
             success: true, 
             liked: !isLiked, 
             likesCount: listing.likesCount 
         });
-    }
-    catch(error){
+    } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
 };
@@ -273,11 +290,19 @@ export const incrementViews = async (req, res) => {
             { 
                 $inc: { 
                     views: 1, 
-                    rankingScore: 0.5 // Small, fair increase for everyone
+                    rankingScore: 0.5 
                 } 
             },
             { new: true }
         );
+
+        if (!listing) return res.status(404).json({ success: false, message: "Listing not found" });
+
+        // Broadcast the new view count to everyone in the listing room
+        io.to(`listing_${req.params.id}`).emit("listingUpdated", {
+            listingId: req.params.id,
+            views: listing.views
+        });
 
         res.status(200).json({
             success: true,

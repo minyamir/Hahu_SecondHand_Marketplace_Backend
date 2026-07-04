@@ -41,6 +41,9 @@ const notificationSchema = new mongoose.Schema(
        "escrow_locked",
         "escrow_released",
         "escrow_refunded",
+
+
+        "like_received",
         "system"
       ],
       required: true
