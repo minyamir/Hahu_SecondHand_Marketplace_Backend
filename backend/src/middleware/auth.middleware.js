@@ -36,6 +36,14 @@ export const authMiddleware = async (req, res, next) => { // 2. Make it async
     });
   }
 };
+
+export const isAdmin = (req, res, next) => {
+    if (req.user && req.user.role === 'admin') {
+        next();
+    } else {
+        res.status(403).json({ success: false, message: "Access denied. Admins only." });
+    }
+};
 // Add this line at the very bottom of your auth.middleware.js file:
 export default authMiddleware;
 export { authMiddleware as protect };

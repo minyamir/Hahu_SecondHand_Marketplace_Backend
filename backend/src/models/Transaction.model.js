@@ -29,10 +29,9 @@ const transactionSchema = new mongoose.Schema(
         "purchase",
         "sale_payout",
 
-        "escrow_locked",
+         "escrow_locked",    
         "escrow_released",
-
-        "refund",
+        "escrow_refunded"  ,  
 
         "platform_fee"
       ],
