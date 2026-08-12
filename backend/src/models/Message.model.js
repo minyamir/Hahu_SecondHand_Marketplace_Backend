@@ -28,4 +28,4 @@ const MessageSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 const Message = mongoose.model('Message', MessageSchema);
-export default Message; // 🟢 Clean ESM Default Export
+export default Message; // 🟢 Clean ESM Default Exportcls

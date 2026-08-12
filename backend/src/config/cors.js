@@ -3,6 +3,7 @@ import { env } from "./env.js";
 
 export const corsMiddleware = cors({
   origin: '*',
-  methods: ["GET", "POST", "PUT", "DELETE"],
-  credentials: true
+methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization'],
 });

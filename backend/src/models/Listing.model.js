@@ -6,10 +6,32 @@ const listingSchema = new mongoose.Schema(
     title: { type: String, required: true, trim: true },
     description: { type: String, required: true },
     price: { type: Number, required: true },
-    category: { type: String, required: true }, 
+    category: { 
+        type: String, 
+        required: true,
+        enum: [
+            "Electronics", 
+            "Clothing & Fashion", 
+            "Furniture",
+            "Home & Kitchen", 
+            "Vehicles", 
+            "Real Estate", 
+            "Beauty & Health", 
+            "Sports & Outdoors", 
+            "Books & Stationery", 
+            "Services", 
+            "Toys & Games",
+            "Other"
+        ] // ከዚህ ውጭ ሌላ እንዳይገባ ይቆጣጠራል
+    },
     images: [{ type: String }], 
     location: { type: String, default: "Bahir Dar" },
-    condition: { type: String, enum: ['new', 'slightly used', 'used'], default: 'used' },
+   // 🟢 FIXED: Enum values and default capitalization now match
+    condition: { 
+      type: String,
+      enum: ['New', 'Used', 'Like New', 'Refurbished', 'Fair', 'Good', 'new', 'used'], 
+      default: 'Used' 
+    },
     
     // --- NEW: AI & Security Fields ---
     isAiApproved: { type: Boolean, default: false }, // Moderation flag

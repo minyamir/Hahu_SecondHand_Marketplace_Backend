@@ -1,48 +1,92 @@
-// src/services/chat.service.js
 import Chat from '../models/Chat.model.js';
 import Message from '../models/Message.model.js';
+import Listing from '../models/Listing.model.js'; // 🟢 የ Listing ሞዴልን ማስገባት ያስፈልጋል
 
-export const createOrGetChat = async (listingId, buyerId, sellerId) => {
-    // Check if a unique chat room already exists for this exact item between these users
-    let chat = await Chat.findOne({
-        listing: listingId,
-        participants: {     $all: [buyerId, sellerId] }
-    });
-
-    // If no prior conversation room exists, instantiate a fresh tracking schema
-    if (!chat) {
-        chat = await Chat.create({
-            listing: listingId,
-            participants: [buyerId, sellerId]
-        });
+export const createOrGetChat = async (listingId, senderId, targetUserId) => {
+    // 1. መጀመሪያ እቃውን እንፈልጋለን
+    const listing = await Listing.findById(listingId);
+    if (!listing) {
+        throw new Error('Listing not found');
     }
 
-    return chat;
+    // 2. የባለቤቱን (Seller) አይዲ እናረጋግጣለን
+    const ownerId = listing.seller ? listing.seller.toString() : null;
+    if (!ownerId) {
+        throw new Error('Listing owner not found');
+    }
+
+    const senderStr = senderId.toString();
+    const targetStr = targetUserId.toString();
+
+    // 3. 🟢 በጣም ወሳኝ ቼክ: ከሁለቱ ተሳታፊዎች (sender ወይም target) ቢያንስ አንደኛው 
+    // የግድ የዕቃው ባለቤት (ownerId) መሆን አለበት! (ገዢዎች እርስ በእርሳቸው ማውራት አይችሉም)
+    if (senderStr !== ownerId && targetStr !== ownerId) {
+        throw new Error('Chats can only be created between a buyer and the product owner');
+    }
+
+    // 4. የባለቤቱን (ownerId) የራሱን Self-Chat እንከለክላለን
+    if (senderStr === ownerId && targetStr === ownerId) {
+        throw new Error('You cannot start a chat with yourself on your own listing');
+    }
+
+    // 5. የሁለቱን ተጠቃሚዎች IDዎች በአንድ ወጥ ቅደም ተከተል (Alphabetical Sort) እንይዛለን
+    const sortedParticipants = [senderStr, targetStr].sort();
+
+    // 6. ቻቱ አስቀድሞ መኖሩን እንፈትሻለን
+    let chat = await Chat.findOne({
+        listing: listingId,
+        participants: sortedParticipants
+    });
+
+    if (chat) {
+        return chat;
+    }
+
+    // 7. ሻጩ ራሱ አዲስ ቻት initiator ሆኖ መጀመር ከፈለገ እናግደዋለን (ሻጭ መጀመር የለበትም፣ ገዢ ነው መጀመር ያለበት)
+    if (senderStr === ownerId) {
+        throw new Error('Sellers cannot initiate a new chat, only buyers can start a chat');
+    }
+
+    // 8. ቻቱ ከሌለ አዲስ እንፈጥራለን
+    try {
+        chat = await Chat.create({
+            listing: listingId,
+            participants: sortedParticipants
+        });
+
+        return chat;
+    } catch (error) {
+        // 9. ፋንክሽኑ ሲደጋገም ሊፈጠር የሚችለውን ውድድር እንይዛለን
+        if (error.code === 11000) {
+            chat = await Chat.findOne({
+                listing: listingId,
+                participants: sortedParticipants
+            });
+
+            if (chat) {
+                return chat;
+            }
+        }
+
+        throw error;
+    }
 };
 
 export const getUserChatRooms = async (userId) => {
-    // Fetch all active dialogue channels where the targeted authenticated user is a participant
     return await Chat.find({ participants: userId })
         .populate('participants', 'fullName email isVerified')
         .populate('listing', 'title price images location')
         .populate('lastMessage')
-        .sort({ updatedAt: -1 }); // Pushes channels with active recent text threads to the top
+        .sort({ updatedAt: -1 });
 };
 
 export const getRoomMessages = async (chatId) => {
-    // Queries historical records for room streams
     return await Message.find({ chatId })
         .populate('sender', 'fullName isVerified')
-        .sort({ createdAt: 1 }); // Ascending layout ensures standard narrative timeline
+        .sort({ createdAt: 1 });
 };
 
-/**
- * @desc    Persist a fresh incoming message and link it as the chat's lastMessage reference
- * @param   {Object} messageData 
- * @returns {Object} Saved message document
- */
 export const saveNewMessage = async ({ chatId, senderId, text, isFlagged, flaggedReason }) => {
-    // 1. Create and save the message text log
     const message = await Message.create({
         chatId,
         sender: senderId,
@@ -51,7 +95,6 @@ export const saveNewMessage = async ({ chatId, senderId, text, isFlagged, flagge
         flaggedReason
     });
 
-    // 2. Update the parent Chat room's lastMessage pointer and updatedAt timestamp
     await Chat.findByIdAndUpdate(chatId, { 
         lastMessage: message._id 
     });

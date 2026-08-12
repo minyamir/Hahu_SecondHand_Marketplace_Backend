@@ -73,7 +73,7 @@ export const registerChatSocket = (io) => {
             console.error("❌ Auto-join failed:", err);
         }
 
-        socket.on('sendMessage', async (data) => {
+socket.on('sendMessage', async (data) => {
             const msgData = typeof data === 'string' ? JSON.parse(data) : data;
             
             try {
@@ -84,6 +84,21 @@ export const registerChatSocket = (io) => {
                 }
 
                 const senderId = socket.user._id;
+
+                console.log("========== SEND MESSAGE ==========");
+                console.log("targetUserId:", targetUserId);
+                console.log("listingId:", listingId);
+                console.log("text:", text);
+                console.log("senderId:", senderId.toString());
+
+                if (!mongoose.Types.ObjectId.isValid(targetUserId)) {
+                    throw new Error(`Invalid targetUserId: ${targetUserId}`);
+                }
+
+                if (!mongoose.Types.ObjectId.isValid(listingId)) {
+                    throw new Error(`Invalid listingId: ${listingId}`);
+                }
+
                 const targetObjId = new mongoose.Types.ObjectId(targetUserId);
                 const listingObjId = new mongoose.Types.ObjectId(listingId);
 
@@ -94,17 +109,31 @@ export const registerChatSocket = (io) => {
                 // 2. Process, Moderate, and Save
                 const savedMessage = await saveAndProcessMessage(chatId, senderId, text);
                 
-                // 3. Join sender to room (in case they weren't) and Broadcast
+                // 3. 🟢 በጣም አስፈላጊው እርምጃ: ላኪውን (Sender) ወደ ሩሙ እናስገባለን
                 socket.join(chatId); 
-                // socket.to(chatId) sends to everyone in room EXCEPT sender
+
+                // 4. 🟢 ተቀባዩ (Target User) ኦንላይን ከሆነ የሱን ሶኬት አግኝተን ወደዚሁ ሩም እናስገባዋለን (Force Join)
+                // የ socket.ioን default adapter በመጠቀም በሰርቨር ያሉትን socket IDs እንፈትሻለን
+                const sockets = await io.fetchSockets();
+                for (const s of sockets) {
+                    if (s.user && s.user._id.toString() === targetUserId.toString()) {
+                        s.join(chatId);
+                    }
+                }
+// 5. 🟢 መልእክቱን ላኪውን ሳይጨምር በሩሙ ውስጥ ለሌሎቹ ብቻ እናደርሳለን (socket.to)
                 socket.to(chatId).emit('messageReceived', savedMessage);
-                // ተጨማሪ: ለተቀባዩ (Target User) "አዲስ መልእክት አለህ" የሚል Notification መላክ
-                        await createNotification({
-                            userId: targetUserId,
-                            title: "💬 New Message",
-                            message: `You have a new message from ${socket.user.fullName}`,
-                            type: "new_chat_message"
-                        });
+
+                // አማራጭ: ላኪው (Sender) መልእክቱ በሰርቨር መመዝገቡን እንዲያውቅ ማረጋገጫ መላክ ይቻላል
+                socket.emit('messageSentSuccessfully', savedMessage);
+
+                // 6. ለተቀባዩ (Target User) "አዲስ መልእክት አለህ" የሚል Notification መላክ
+                await createNotification({
+                    userId: targetUserId,
+                    title: "💬 New Message",
+                    message: `You have a new message from ${socket.user.fullName}`,
+                    type: "new_chat_message"
+                });
+
                 console.log(`💾 SUCCESS: Message sent to room ${chatId}`);
             } catch (error) {
                 console.error("❌ DEBUG: Detailed Error:", error); 

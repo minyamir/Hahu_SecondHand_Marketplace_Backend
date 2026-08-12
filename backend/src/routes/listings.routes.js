@@ -23,6 +23,7 @@ router.get('/verified', getVerifiedListings);
 router.get('/my-listings', authMiddleware, getMyListings);
 router.get('/', getAllListings);// New route for all listings with filters
 router.get('/:id', getListingById);
+
 router.post(
     '/upload', 
     authMiddleware,      // 1. Are they logged in?

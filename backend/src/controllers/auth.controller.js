@@ -1,5 +1,5 @@
 import * as authService from "../services/auth.service.js";
-
+import User from "../models/User.model.js"; // 👈 Add this import!
 export const register = async (req, res, next) => {
   try {
     // Explicitly destructure, including role
@@ -51,3 +51,27 @@ export const me = async (req, res, next) => {
   }
 };
 
+export const updateAvatar = async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: "No avatar uploaded" });
+    }
+
+    // 🔑 Point to the subfolder where the file actually lives (/uploads/misc/)
+    const avatarUrl = `/uploads/misc/${req.file.filename}`;
+
+    const updatedUser = await User.findByIdAndUpdate(
+      req.user.id || req.user._id,
+      { avatar: avatarUrl },
+      { new: true }
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Avatar uploaded successfully",
+      data: updatedUser,
+    });
+  } catch (error) {
+    next(error); // Passes errors cleanly to errorMiddleware
+  }
+};

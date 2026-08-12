@@ -11,6 +11,7 @@ import notificationRoutes from "./notification.routes.js";
 import walletRoutes from "./wallet.routes.js";
 import escrowRoutes from "./escrow.routes.js";
 import transactionRoutes from "./transaction.routes.js";
+import deliveryRoutes from "./delivery.routes.js"; // የ Delivery መንገድ ማስገባት 
 const router = Router();
 
 router.use("/auth", authRoutes);
@@ -25,5 +26,5 @@ router.use("/notifications", notificationRoutes);
 router.use("/wallet", walletRoutes);
 router.use("/escrow", escrowRoutes);
 router.use("/transactions", transactionRoutes);
-
+router.use("/delivery", deliveryRoutes); // የ Delivery መንገድ ማስገባት
 export default router;

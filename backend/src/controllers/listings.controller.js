@@ -6,7 +6,16 @@ import { io } from '../sockets/socketServer.js'; // Import your initialized io i
 export const createListing = async (req, res) => {
     try {
         const { title, description, price, category, condition, location } = req.body;
-        const sellerId = req.user.id;
+        
+        // Safe sellerId extraction
+        const sellerId = req.user?.id || req.user?._id;
+
+        if (!sellerId) {
+            return res.status(401).json({
+                success: false,
+                message: "Unauthorized. User ID not found."
+            });
+        }
 
         // 1. Validation: Is the category allowed?
         if (!CATEGORIES.includes(category)) {
@@ -16,7 +25,7 @@ export const createListing = async (req, res) => {
             });
         }
 
-        // 2. Validation: Ensure images were uploaded
+        // 2. Validation: Ensure images were uploaded via Multer
         if (!req.files || req.files.length === 0) {
             return res.status(400).json({
                 success: false,
@@ -24,47 +33,65 @@ export const createListing = async (req, res) => {
             });
         }
 
-        // 3. Extract image paths
-        const imagePaths = req.files.map(file => file.path);
-        
-        const startingScore = req.user.isVerified ? 100 : 0;
-        // 4. Create the Listing (Defaulting AI fields to true for now)
+        // 3. Extract image paths safely
+        const imagePaths = req.files.map(file => file.path || file.secure_url || file.filename);
+
+        // 4. Safely handle numerical price conversion
+        const numericPrice = parseFloat(price);
+        if (isNaN(numericPrice)) {
+            return res.status(400).json({
+                success: false,
+                message: "Price must be a valid number."
+            });
+        }
+
+        const startingScore = req.user?.isVerified ? 100 : 0;
+
+        // 5. Create the Listing
         const newListing = new Listing({
             seller: sellerId,
             title,
             description,
-            price,
+            price: numericPrice, // 🟢 Converted string to Float
             category,
             condition,
             location,
             images: imagePaths,
-            isAiApproved: true, // Auto-approve for now
+            isAiApproved: true,
             aiSafetyReason: "Manually skipped for development testing.",
-            rankingScore: startingScore // Use the calculated starting score
+            rankingScore: startingScore
         });
 
         await newListing.save();
-               // 1. Notify the seller (Confirmation)
-        await createNotification({
-            userId: sellerId,
-            title: "🚀 Listing Live!",
-            message: `Your item "${title}" has been posted successfully.`,
-            type: "listing_created"
-        });
-        res.status(201).json({
+
+        // 6. Notify the seller (Wrapped in try/catch to prevent notification failure from killing the response)
+        try {
+            await createNotification({
+                userId: sellerId,
+                title: "🚀 Listing Live!",
+                message: `Your item "${title}" has been posted successfully.`,
+                type: "listing_created"
+            });
+        } catch (notifErr) {
+            console.error("Notification creation failed:", notifErr.message);
+        }
+
+        return res.status(201).json({
             success: true,
             message: "Listing posted successfully!",
             data: newListing
         });
-       
+
     } catch (error) {
-        console.error("Create Listing Error:", error.message);
-        res.status(500).json({
+        // 🟢 Detailed logging to show exact Mongoose / System errors in terminal
+        console.error("Create Listing Error:", error);
+        return res.status(500).json({
             success: false,
-            message: "Failed to create listing. Please try again."
+            message: error.message || "Failed to create listing. Please try again."
         });
     }
 };
+
 export const getVerifiedListings = async (req, res) => {
     try {
         const listings = await Listing.find({ isSold: false })
@@ -112,7 +139,8 @@ export const getAllListings = async (req, res) => {
         if (sort === 'price_low') sortQuery = { price: 1 };
 
         const listings = await Listing.find(filter)
-            .populate('seller', 'fullName isVerified profileImage')
+            // 🛠️ ADD ALL POTENTIAL AVATAR FIELD NAMES HERE
+            .populate('seller', 'fullName isVerified profileImage profileImageUrl avatar')
             .sort(sortQuery)
             .limit(20);
 
@@ -198,11 +226,14 @@ export const deleteListing = async (req, res) => {
     }
 };
 
+// controllers/listings.controller.js
 export const getMyListings = async (req, res) => {
     try {
-        // Find all listings where the seller matches the ID from the token
-        const listings = await Listing.find({ seller: req.user.id })
-            .sort({ createdAt: -1 });
+        const userId = req.user.id || req.user._id;
+        console.log("Currently Authenticated User ID:", userId); // 👈 Log this
+
+        const listings = await Listing.find({ seller: userId }).sort({ createdAt: -1 });
+        console.log("Found listings count for user:", listings.length); // 👈 Log this
 
         res.status(200).json({
             success: true,
@@ -213,6 +244,8 @@ export const getMyListings = async (req, res) => {
         res.status(500).json({ success: false, message: error.message });
     }
 };
+
+
 export const toggleSoldStatus = async (req, res) => {
     try {
         const listing = await Listing.findById(req.params.id);

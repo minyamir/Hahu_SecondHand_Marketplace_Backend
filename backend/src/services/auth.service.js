@@ -108,3 +108,17 @@ export const getCurrentUser = async (userId) => {
 
   return user;
 };
+
+export const updateUserAvatar = async (userId, avatarPath) => {
+  const user = await User.findByIdAndUpdate(
+    userId,
+    { avatar: avatarPath },
+    { new: true, runValidators: true }
+  ).select("-password"); // Exclude password from the returned object
+
+  if (!user) {
+    throw new Error("User not found");
+  }
+
+  return user;
+};

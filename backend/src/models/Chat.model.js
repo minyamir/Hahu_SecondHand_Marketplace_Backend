@@ -18,8 +18,6 @@ const ChatSchema = new mongoose.Schema({
     }
 }, { timestamps: true });
 
-// Ensure a buyer and seller can only have one unique chat room per specific listing
-ChatSchema.index({ participants: 1, listing: 1 }, { unique: true });
 
 const Chat = mongoose.model('Chat', ChatSchema);
-export default Chat; // 🟢 Clean ESM Default Export
+export default Chat;

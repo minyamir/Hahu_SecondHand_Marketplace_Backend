@@ -1,5 +1,7 @@
 import express from "express";
 import morgan from "morgan";
+import path from "path";
+import fs from "fs";
 import { corsMiddleware } from "./config/cors.js";
 import routes from "./routes/index.js";
 import { notFoundMiddleware } from "./middleware/notFound.middleware.js";
@@ -12,7 +14,17 @@ app.use(corsMiddleware);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan("dev"));
-app.use("/uploads", express.static("uploads"));
+
+// 🔑 Target absolute path for the uploads folder
+const uploadsPath = path.join(process.cwd(), "uploads");
+
+// Auto-create folder if it doesn't exist
+if (!fs.existsSync(uploadsPath)) {
+  fs.mkdirSync(uploadsPath, { recursive: true });
+}
+
+// 🔑 REQUIRED: Serve static files from the uploads directory!
+app.use("/uploads", express.static(uploadsPath));
 
 // 2. Base Route - Centralized through routes/index.js
 // This covers /api/wallet, /api/escrow, /api/transactions, etc.
