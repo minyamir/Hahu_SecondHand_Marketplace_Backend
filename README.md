@@ -8,7 +8,7 @@ Integrated wallet for safe payments between buyers and sellers. Funds are protec
 ### Real-Time Chat System
 Buyers and sellers communicate through an in-app messaging system. Supports negotiation, product discussion, and delivery coordination. AI Scam & Illegal Activity Detection The system monitors chat messages to detect:
 
-Scam attempts
+### Scam attempts
 Fraudulent behavior Illegal trading Harmful or suspicious language
 
 
