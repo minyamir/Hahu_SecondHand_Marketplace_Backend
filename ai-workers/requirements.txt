@@ -11,3 +11,4 @@ mediapipe==0.10.35
 
 insightface==1.0.1
 onnxruntime==1.26.0
+ this is run command python -m uvicorn main:app --reload 
